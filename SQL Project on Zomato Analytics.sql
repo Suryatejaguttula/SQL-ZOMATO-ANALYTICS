@@ -32,8 +32,14 @@ group by userid;
 
 
 ---(Q3) what was the first product purchased by each customers---
-select * from
-(select *, rank() over (partition by userid order by created_at) rnk from sales) a where rnk =1
+SELECT s1.userid, s1.product_id, s1.created_at
+FROM sales s1
+WHERE s1.created_at = (
+    SELECT MIN(s2.created_at) 
+    FROM sales s2 
+    WHERE s1.userid = s2.userid
+);
+
 
 
 
@@ -43,45 +49,61 @@ select * from
 
 
 ---(Q4) what is the most purchased item on the menu and  how many times was it purchased by all the customers ---
-select userid, count(product_id) cnt from sales where product_id =
-(select top 1 product_id from sales 
-group by product_id 
-order by count(product_id) desc)
-group by userid
+SELECT product_id, COUNT(*) AS purchase_count
+FROM sales
+GROUP BY product_id
+ORDER BY purchase_count DESC
+LIMIT 1;
+
 
 
 
 
 
 ---(Q5)  which item was most popular for each customer?---
-select * from
-(select*, rank() over(partition by userid order by cnt desc) rnk from 
-(select userid, product_id, count(product_id) cnt from sales 
-group by userid, product_id)a)b
-where rnk = 1
+SELECT s1.userid, s1.product_id
+FROM sales s1
+WHERE s1.product_id = (
+    SELECT s2.product_id
+    FROM sales s2
+    WHERE s1.userid = s2.userid
+    GROUP BY s2.product_id
+    ORDER BY COUNT(*) DESC
+    LIMIT 1
+);
 
 
 
 
 --- (Q6) Which item was purchased first by customer after they become a member ? ---
-select * from
-(select c.*, rank() over(partition by userid order by created_at) rnk from 
-(select a.userid , a.created_at , a.product_id, b.gold_signup_date from sales a
-inner join goldusers_signup b
-on a.userid = b.user_id
-and created_at >= gold_signup_date)c)d where rnk=1;
+SELECT s1.userid, s1.product_id, s1.created_at
+FROM sales s1
+JOIN goldusers_signup g ON s1.userid = g.user_id
+WHERE s1.created_at >= g.gold_signup_date
+AND s1.created_at = (
+    SELECT MIN(s2.created_at)
+    FROM sales s2
+    WHERE s1.userid = s2.userid
+    AND s2.created_at >= g.gold_signup_date
+);
+
 
 
 
 
 
 --- (Q7) Which item was purchased just before customer became a member? ---
-select * from
-(select c.*, rank() over(partition by userid order by created_at DESC) rnk from 
-(select a.userid , a.created_at , a.product_id, b.gold_signup_date from sales a
-inner join goldusers_signup b
-on a.userid = b.user_id
-and created_at <= gold_signup_date)c)d where rnk=1;
+SELECT s1.userid, s1.product_id, s1.created_at
+FROM sales s1
+JOIN goldusers_signup g ON s1.userid = g.user_id
+WHERE s1.created_at < g.gold_signup_date
+AND s1.created_at = (
+    SELECT MAX(s2.created_at)
+    FROM sales s2
+    WHERE s1.userid = s2.userid
+    AND s2.created_at < g.gold_signup_date
+);
+
 
 
 
@@ -90,20 +112,25 @@ and created_at <= gold_signup_date)c)d where rnk=1;
 
 
 ---(Q8) what is total orders and amount spent for each member before they become a member ?---
-
-select userid, count(created_at) order_purchased, sum(price) total_amt_spent from
-(select c.*, d.price from
-(select a.userid , a.created_at , a.product_id, b.gold_signup_date from sales a
-inner join goldusers_signup b
-on a.userid = b.user_id
-and created_at <= gold_signup_date)c inner join product d on c.product_id = d.product_id)e
-group by userid;
+SELECT s.userid, COUNT(*) AS total_orders, SUM(p.price) AS total_spent
+FROM sales s
+JOIN product p USING (product_id)
+JOIN goldusers_signup g ON s.userid = g.user_id
+WHERE s.created_at < g.gold_signup_date
+GROUP BY s.userid;
 
 
 
 
 ---(Q9)Rank all the transactions of the customers---
-select *, rank() over(partition by userid order by created_at) rnk from sales;
+SELECT s1.userid, s1.product_id, s1.created_at, 
+       (SELECT COUNT(*) 
+        FROM sales s2 
+        WHERE s1.userid = s2.userid 
+        AND s2.created_at <= s1.created_at) AS transaction_rank
+FROM sales s1
+ORDER BY s1.userid, transaction_rank;
+
 
 
 
